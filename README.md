@@ -12,16 +12,20 @@ docker attach wm
 ## Visualizations
 To visualize the environment from the agents perspective or generate synthetic observations use the visualizations jupyter notebook 
 
-Sample of a real frame
+Sample of a real frame.
+
 ![alt text](imgs/true_frame.png "Real Frame")
 
 Reconstruction of the real frame. This can be thought of as what the agent sees.
+
 ![alt text](imgs/reconstructed_frame.png "Reconstructed Frame")
 
-This is an entirely imagined frame that never existed
+This is an entirely imagined frame that never existed.
+
 ![alt text](imgs/imagined.png "Imagined Frame")
 
 A gif of a reconstructed trajectory. 
+
 ![alt text](imgs/traj.gif "reconstructed trajectory")
 
 ## Reproducing Results From Scratch
