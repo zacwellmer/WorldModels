@@ -1,0 +1,25 @@
+# FROM defines the base image
+FROM tensorflow/tensorflow:2.1.0-gpu-py3 
+
+# set the working directory 
+WORKDIR /home/ubuntu/WM
+
+# pass the requirements file
+COPY . .
+
+RUN apt -y update
+RUN apt install -y git
+RUN apt install -y libopenmpi-dev
+RUN apt install -y python-mpi4py=2.0.0-3 # for some reason couldn't get it to work with pip
+RUN apt install -y xvfb
+RUN apt install -y python-opengl
+RUN apt install -y fontconfig
+
+# install pip packages
+RUN pip install --upgrade pip
+RUN pip install -r docker/requirements.txt
+
+# CMD defines the default command to be run in the container 
+# CMD is overridden by supplying a command + arguments to 
+# `docker run`, e.g. `nvcc --version` or `bash`
+CMD bash
