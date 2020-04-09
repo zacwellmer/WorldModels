@@ -51,4 +51,8 @@ bash gce_train.bash
 ```
 
 ## Disclaimer
-I have not run this for long enough(~45 days wall clock time) to verify that we produce the same results on CarRacing-v0 as the original implementation. 
+I have not run this for long enough(~45 days wall clock time) to verify that we produce the same results on CarRacing-v0 as the original implementation. From the limited longer experiments run it seems our implementation performs worse
+
+Average return curves comparing the original implementation and ours. The shaded area represents a standard deviation above and below the mean. 
+
+![alt text](imgs/og_eager_comparison.png "comparison")
