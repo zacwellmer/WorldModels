@@ -29,7 +29,7 @@ A gif of a reconstructed trajectory.
 ![alt text](imgs/traj.gif "reconstructed trajectory")
 
 ## Reproducing Results From Scratch
-1) To reproduce results, run the extract.bash script to generate 10k trajectories
+To reproduce results, run the extract.bash script to generate 10k trajectories
 ```
 bash extract.bash
 ```
