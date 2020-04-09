@@ -10,7 +10,7 @@ docker attach wm
 ```
 
 ## Visualizations
-To visualize the environment from the agents perspective or generate synthetic observations use the visualizations jupyter notebook 
+To visualize the environment from the agents perspective or generate synthetic observations use the [visualizations jupyter notebook](WorldModels/visualizations.ipynb) 
 
 Sample of a real frame.
 
