@@ -9,3 +9,4 @@ PyQt5==5.12.3
 joblib==0.14.1
 psutil==5.7.0
 tqdm==4.43.0
+mpi4py==2.0.0
