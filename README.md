@@ -25,7 +25,9 @@ This is an entirely imagined frame that never existed.
 ![alt text](imgs/imagined.png "Imagined Frame")
 
 A gif of the true trajectory (left) and the reconstructed trajectory (right). 
-![alt-text-1](imgs/true_traj.gif "Imagined Trajectory") ![alt-text-2](imgs/reconstruct_traj.gif "Reconstructed Trajectory")
+Ground Truth             |  Reconstructed
+:-------------------------:|:-------------------------:
+![alt-text-1](imgs/true_traj.gif "Imagined Trajectory") | ![alt-text-2](imgs/reconstruct_traj.gif "Reconstructed Trajectory")
 
 ## Reproducing Results From Scratch
 To reproduce results, run the extract.bash script to generate 10k trajectories
