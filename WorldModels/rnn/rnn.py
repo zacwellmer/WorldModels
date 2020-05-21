@@ -5,8 +5,6 @@ import tensorflow as tf
 from tensorflow_probability import distributions as tfd
 import tensorflow_probability as tfp
 
-# hyperparameters for our model. I was using an older tf version, when HParams was not available ...
-
 # controls whether we concatenate (z, c, h), etc for features used for car.
 MODE_ZCH = 0
 MODE_ZC = 1
@@ -14,51 +12,7 @@ MODE_Z = 2
 MODE_Z_HIDDEN = 3 # extra hidden later
 MODE_ZH = 4
 
-HyperParams = namedtuple('HyperParams', ['num_steps',
-                                         'max_seq_len',
-                                         'input_seq_width',
-                                         'output_seq_width',
-                                         'rnn_size',
-                                         'batch_size',
-                                         'grad_clip',
-                                         'num_mixture',
-                                         'learning_rate',
-                                         'decay_rate',
-                                         'min_learning_rate',
-                                         'use_layer_norm',
-                                         'use_recurrent_dropout',
-                                         'recurrent_dropout_prob',
-                                         'use_input_dropout',
-                                         'input_dropout_prob',
-                                         'use_output_dropout',
-                                         'output_dropout_prob',
-                                         'is_training',
-                                        ])
-
-def default_hps():
-  return HyperParams(num_steps=2000, # train model for 2000 steps.
-                     max_seq_len=1000, # train on sequences of 100
-                     input_seq_width=35,    # width of our data (32 + 3 actions)
-                     output_seq_width=32,    # width of our data is 32
-                     rnn_size=256,    # number of rnn cells
-                     batch_size=100,   # minibatch sizes
-                     grad_clip=1.0,
-                     num_mixture=5,   # number of mixtures in MDN
-                     learning_rate=0.001,
-                     decay_rate=1.0,
-                     min_learning_rate=0.00001,
-                     use_layer_norm=0, # set this to 1 to get more stable results (less chance of NaN), but slower
-                     use_recurrent_dropout=0,
-                     recurrent_dropout_prob=0.90,
-                     use_input_dropout=0,
-                     input_dropout_prob=0.90,
-                     use_output_dropout=0,
-                     output_dropout_prob=0.90,
-                     is_training=1)
-
-hps_model = default_hps()
-hps_sample = hps_model._replace(batch_size=1, max_seq_len=1, use_recurrent_dropout=0, is_training=0)
-
+@tf.function
 def sample_vae(vae_mu, vae_logvar):
     sz = vae_mu.shape[1]
     mu_logvar = tf.concat([vae_mu, vae_logvar], axis=1)
@@ -66,53 +20,72 @@ def sample_vae(vae_mu, vae_logvar):
     return z(mu_logvar)
 
 class MDNRNN(tf.keras.Model):
-    def __init__(self, hps):
+    def __init__(self, args):
         super(MDNRNN, self).__init__()
-        self.hps = hps
-        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.hps.learning_rate, clipvalue=self.hps.grad_clip)
+        self.args = args
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.args.rnn_learning_rate, clipvalue=self.args.rnn_grad_clip)
 
         self.loss_fn = self.get_loss() 
 
-        lstm_cell = tf.keras.layers.LSTMCell(units=hps.rnn_size)
+        lstm_cell = tf.keras.layers.LSTMCell(units=args.rnn_size)
 
         self.inference_base = tf.keras.layers.RNN(cell=lstm_cell, return_sequences=True, return_state=True, time_major=False)
 
         self.out_net = tf.keras.Sequential([
-            tf.keras.layers.InputLayer(input_shape=self.hps.rnn_size),
-            tf.keras.layers.Dense(3 * hps.num_mixture * hps.output_seq_width, name="mu_logstd_logmix_net")])
+            tf.keras.layers.InputLayer(input_shape=self.args.rnn_size),
+            tf.keras.layers.Dense(args.rnn_out_size, name="mu_logstd_logmix_net")])
 
-        super(MDNRNN, self).build((self.hps.batch_size, self.hps.max_seq_len, self.hps.input_seq_width))
-
-    @tf.function
-    def get_output_size(self, mode):
-        if mode == MODE_ZCH:
-            return (32+256+256)
-        if (mode == MODE_ZC) or (mode == MODE_ZH):
-            return (32+256)
-        return 32 # MODE_Z or MODE_Z_HIDDEN
+        super(MDNRNN, self).build((self.args.rnn_batch_size, self.args.rnn_max_seq_len, self.args.rnn_input_seq_width))
 
     def get_loss(self):
-        num_mixture = self.hps.num_mixture
-        output_seq_width = self.hps.output_seq_width
+        num_mixture = self.args.rnn_num_mixture
+        batch_size = self.args.rnn_batch_size
+        z_size = self.args.z_size
+        
         """Construct a loss functions for the MDN layer parametrised by number of mixtures."""
         # Construct a loss function with the right number of mixtures and outputs
-        def DHA_loss_func(y_true, y_pred):
+        def z_loss_func(y_true, y_pred):
             '''
             This loss function is defined for N*k components each containing a gaussian of 1 feature
             '''
+            mdnrnn_params = y_pred
+
+            y_true = tf.reshape(y_true, [batch_size, -1, z_size + 1]) # +1 for mask
+            z_true, mask = y_true[:, :, :-1], y_true[:, :, -1:]
+
             # Reshape inputs in case this is used in a TimeDistribued layer
-            y_pred = tf.reshape(y_pred, [-1, 3*num_mixture], name='reshape_ypreds')
-            vae_z = tf.reshape(y_true, [-1, 1], name='reshape_ytrue')
+            mdnrnn_params = tf.reshape(mdnrnn_params, [-1, 3*num_mixture], name='reshape_ypreds')
+            vae_z, mask = tf.reshape(z_true, [-1, 1]), tf.reshape(mask, [-1, 1])
             
-            out_mu, out_logstd, out_logpi = tf.split(y_pred, num_or_size_splits=3, axis=1, name='mdn_coef_split')
+            out_mu, out_logstd, out_logpi = tf.split(mdnrnn_params, num_or_size_splits=3, axis=1, name='mdn_coef_split')
             out_logpi = out_logpi - tf.reduce_logsumexp(input_tensor=out_logpi, axis=1, keepdims=True) # normalize
 
             logSqrtTwoPI = np.log(np.sqrt(2.0 * np.pi))
             lognormal = -0.5 * ((vae_z - out_mu) / tf.exp(out_logstd)) ** 2 - out_logstd - logSqrtTwoPI
             v = out_logpi + lognormal
-            v = tf.reduce_logsumexp(input_tensor=v, axis=1, keepdims=True)
-            return -tf.reduce_mean(input_tensor=v)
-        return DHA_loss_func
+            
+            z_loss = -tf.reduce_logsumexp(input_tensor=v, axis=1, keepdims=True)
+            mask = tf.reshape(tf.tile(mask, [1, z_size]), [-1, 1]) # tile b/c we consider z_loss is flattene
+            z_loss = mask * z_loss # don't train if episode ends
+            z_loss = tf.reduce_sum(z_loss) / tf.reduce_sum(mask) 
+            return z_loss
+
+        def d_loss_func(y_true, y_pred):
+            d_pred = y_pred
+
+            y_true = tf.reshape(y_true, [batch_size, -1, 1 + 1]) # b/c tf is stupid
+            d_true, mask = y_true[:, :, :-1], y_true[:, :, -1:]
+            d_true, mask = tf.reshape(d_true, [-1, 1]), tf.reshape(mask, [-1, 1])
+            
+            d_loss = tf.expand_dims(tf.keras.losses.binary_crossentropy(y_true=d_true, y_pred=d_pred, from_logits=True), axis=-1)
+            d_loss = mask * d_loss
+            d_loss = tf.reduce_sum(d_loss) / tf.reduce_sum(mask) # mean of unmasked 
+            return d_loss
+
+        if self.args.env_name == 'DoomTakeCover-v0':
+            return z_loss_func, d_loss_func
+        else:
+            return z_loss_func
 
     def set_random_params(self, stdev=0.5):
         params = self.get_weights()
@@ -128,16 +101,17 @@ class MDNRNN(tf.keras.Model):
         return self.__call__(inputs, training)
 
     def __call__(self, inputs, training=True):
-        vae_z, a = inputs[:, :, :self.hps.output_seq_width], inputs[:, :, self.hps.output_seq_width:]
+        rnn_out, _, _ = self.inference_base(inputs)
 
-        z_a = tf.concat([vae_z, a], axis=2)
-
-        rnn_out, _, _ = self.inference_base(z_a)
-
-        rnn_out = tf.reshape(rnn_out, [-1, self.hps.rnn_size])
+        rnn_out = tf.reshape(rnn_out, [-1, self.args.rnn_size])
         out = self.out_net(rnn_out)
-        return out
+        if self.args.env_name == 'CarRacing-v0':
+          return out
+        else: 
+          mdnrnn_params, done_logits = out[:, :-1], out[:, -1:]
+          return mdnrnn_params, done_logits
 
+@tf.function
 def rnn_next_state(rnn, z, a, prev_state):
     z = tf.cast(tf.reshape(z, [1, 1, -1]), tf.float32)
     a = tf.cast(tf.reshape(a, [1, 1, -1]), tf.float32)
@@ -145,13 +119,7 @@ def rnn_next_state(rnn, z, a, prev_state):
     _, h, c = rnn.inference_base(z_a, initial_state=prev_state)
     return [h, c]
 
-def rnn_output_size(mode):
-  if mode == MODE_ZCH:
-    return (32+256+256)
-  if (mode == MODE_ZC) or (mode == MODE_ZH):
-    return (32+256)
-  return 32 # MODE_Z or MODE_Z_HIDDEN
-
+@tf.function
 def rnn_init_state(rnn):
   return rnn.inference_base.cell.get_initial_state(batch_size=1, dtype=tf.float32) 
 
@@ -165,3 +133,36 @@ def rnn_output(state, z, mode):
     return np.concatenate([z, state_h[0]])
   return z # MODE_Z or MODE_Z_HIDDEN
 
+@tf.function
+def rnn_sim(rnn, z, states, a):
+  if rnn.args.env_name == 'CarRacing-v0':
+    raise ValueError('Not implemented yet for CarRacing')
+  z = tf.reshape(tf.cast(z, dtype=tf.float32), (1, 1, rnn.args.z_size))
+  a = tf.reshape(tf.cast(a, dtype=tf.float32), (1, 1, rnn.args.a_width))
+  input_x = tf.concat((z, a), axis=2)
+  rnn_out, h, c = rnn.inference_base(input_x, initial_state=states)
+  rnn_state = [h, c]
+  rnn_out = tf.reshape(rnn_out, [-1, rnn.args.rnn_size])
+  out = rnn.out_net(rnn_out)
+
+  mdnrnn_params, d_logits = out[:, :-1], out[:, -1:]
+  mdnrnn_params = tf.reshape(mdnrnn_params, [-1, 3*rnn.args.rnn_num_mixture])
+
+  mu, logstd, logpi = tf.split(mdnrnn_params, num_or_size_splits=3, axis=1)
+  logpi = logpi - tf.reduce_logsumexp(input_tensor=logpi, axis=1, keepdims=True) # normalize
+
+  d_dist = tfd.Binomial(total_count=1, logits=d_logits)
+  d = tf.squeeze(d_dist.sample()) == 1.0
+
+  cat = tfd.Categorical(logits=logpi)
+  component_splits = [1] * rnn.args.rnn_num_mixture
+  mus = tf.split(mu, num_or_size_splits=component_splits, axis=1)
+  sigs = tf.split(tf.exp(logstd), num_or_size_splits=component_splits, axis=1)
+  coll = [tfd.MultivariateNormalDiag(loc=loc, scale_diag=scale) for loc, scale in zip(mus, sigs)]
+  mixture = tfd.Mixture(cat=cat, components=coll)
+
+  z = tf.reshape(mixture.sample(), shape=(-1, rnn.args.z_size))
+
+  r = 1.0 # For Doom Reward is always 1.0 if the agent is alive
+
+  return rnn_state, z, r, d

@@ -1,17 +1,3 @@
-# training settings
-''' roboschool envs available
-robo_pendulum
-robo_double_pendulum
-robo_reacher
-robo_flagrun
-
-robo_ant
-robo_reacher
-robo_hopper
-robo_walker
-robo_humanoid
-'''
-
 from mpi4py import MPI
 import numpy as np
 import json
@@ -19,53 +5,25 @@ import os
 import subprocess
 import sys
 from env import make_env
-from model import make_model, simulate
+from controller import make_controller, simulate
 from es import CMAES, SimpleGA, OpenES, PEPG
+from utils import PARSER
 import argparse
 import time
-
-### ES related code
-num_episode = 1
-eval_steps = 25 # evaluate every N_eval steps
-retrain_mode = True
-cap_time_mode = True
-
-num_worker = 8
-num_worker_trial = 1
-
-population = num_worker * num_worker_trial
-
-gamename = 'carracing'
-optimizer = 'pepg'
-antithetic = True
-batch_mode = 'mean'
-
-# seed for reproducibility
-seed_start = 0
-
-### name of the file (can override):
-filebase = None
-
-model = None
-num_params = -1
-
-es = None
 
 ### MPI related code
 comm = MPI.COMM_WORLD
 rank = comm.Get_rank()
-
-PRECISION = 10000
-SOLUTION_PACKET_SIZE = (5+num_params)*num_worker_trial
-RESULT_PACKET_SIZE = 4*num_worker_trial
 ###
 
 def initialize_settings(sigma_init=0.1, sigma_decay=0.9999):
-  global population, filebase, game, controller, env, num_params, es, PRECISION, SOLUTION_PACKET_SIZE, RESULT_PACKET_SIZE
+  global population, filebase, game, controller, num_params, es, PRECISION, SOLUTION_PACKET_SIZE, RESULT_PACKET_SIZE
   population = num_worker * num_worker_trial
-  filebase = 'results/eager/log/'+gamename+'.'+optimizer+'.'+str(num_episode)+'.'+str(population)
-  controller = make_model()
-  env = make_env()
+  filedir = 'results/{}/{}/log/'.format(exp_name, env_name)
+  if not os.path.exists(filedir):
+      os.makedirs(filedir)
+  filebase = filedir+env_name+'.'+optimizer+'.'+str(num_episode)+'.'+str(population)
+  controller = make_controller(args=config_args)
 
   num_params = controller.param_count
   print("size of model", num_params)
@@ -190,12 +148,14 @@ def decode_result_packet(packet):
   return result
 
 def worker(weights, seed, train_mode_int=1, max_len=-1):
-
   train_mode = (train_mode_int == 1)
   controller.set_model_params(weights)
-  reward_list, t_list = simulate(controller, env,
-    train_mode=train_mode, render_mode=False, num_episode=num_episode, seed=seed, max_len=max_len)
-
+  if train_mode_int == True:
+    reward_list, t_list = simulate(controller, env,
+	    train_mode=train_mode, render_mode=False, num_episode=num_episode, seed=seed, max_len=max_len)
+  else:
+    reward_list, t_list = simulate(controller, test_env,
+        train_mode=train_mode, render_mode=False, num_episode=num_test_episode, seed=seed, max_len=max_len)
   if batch_mode == 'min':
     reward = np.min(reward_list)
   else:
@@ -205,7 +165,12 @@ def worker(weights, seed, train_mode_int=1, max_len=-1):
   return reward, t
 
 def slave():
-  env = make_env()
+  global env
+  if env_name == 'CarRacing-v0':
+    env = make_env(args=config_args, dream_env=False) # training in dreams not supported yet
+  else:
+    env = make_env(args=config_args, dream_env=True, render_mode=False)
+
   packet = np.empty(SOLUTION_PACKET_SIZE, dtype=np.int32)
   while 1:
     comm.Recv(packet, source=0)
@@ -256,26 +221,23 @@ def receive_packets_from_slaves():
   assert check_sum == 0, check_sum
   return reward_list_total
 
-def evaluate_batch(model_params, max_len=-1):
-  # duplicate model_params
-  solutions = []
-  for i in range(es.popsize):
-    solutions.append(np.copy(model_params))
-
-  seeds = np.arange(es.popsize)
-
-  packet_list = encode_solution_packets(seeds, solutions, train_mode=0, max_len=max_len)
-
-  send_packets_to_slaves(packet_list)
-  reward_list_total = receive_packets_from_slaves()
-
-  reward_list = reward_list_total[:, 0] # get rewards
-  return reward_list
+def evaluate_batch(model_params, test_seed, max_len=-1):
+  # runs only from master since mpi and Doom was janky
+  controller.set_model_params(model_params)
+  rewards_list, t_list = simulate(controller, test_env,
+        train_mode=False, render_mode=False, num_episode=num_test_episode, seed=test_seed, max_len=max_len)
+  return rewards_list
 
 def master():
+  global test_env
+  if env_name == 'CarRacing-v0':
+    test_env = make_env(args=config_args, dream_env=False)
+  else:
+    test_env = make_env(args=config_args, dream_env=False, render_mode=False)
+
 
   start_time = int(time.time())
-  sprint("training", gamename)
+  sprint("training", env_name)
   sprint("population", es.popsize)
   sprint("num_worker", num_worker)
   sprint("num_worker_trial", num_worker_trial)
@@ -289,9 +251,7 @@ def master():
   filename_eval_hist = filebase+'.eval_hist.json'
   filename_hist_best = filebase+'.hist_best.json'
   filename_best = filebase+'.best.json'
-
-  env = make_env()
-
+  
   t = 0
 
   history = []
@@ -302,10 +262,7 @@ def master():
   best_model_params_eval = None
 
   max_len = -1 # max time steps (-1 means ignore)
-
   while True:
-    t += 1
-
     solutions = es.ask()
 
     if antithetic:
@@ -313,7 +270,6 @@ def master():
       seeds = seeds+seeds
     else:
       seeds = seeder.next_batch(es.popsize)
-
     packet_list = encode_solution_packets(seeds, solutions, max_len=max_len)
 
     send_packets_to_slaves(packet_list)
@@ -354,7 +310,7 @@ def master():
     with open(filename_hist, 'wt') as out:
       res = json.dump(history, out, sort_keys=False, indent=0, separators=(',', ':'))
 
-    sprint(gamename, h)
+    sprint(env_name, h)
 
     if (t == 1):
       best_reward_eval = avg_reward
@@ -362,11 +318,11 @@ def master():
 
       prev_best_reward_eval = best_reward_eval
       model_params_quantized = np.array(es.current_param()).round(4)
-      reward_eval_list = evaluate_batch(model_params_quantized, max_len=-1)
+      reward_eval_list = evaluate_batch(model_params_quantized, max_len=-1, test_seed=t)
       reward_eval = np.mean(reward_eval_list)
       r_eval_std = np.std(reward_eval_list)
-      r_eval_min = min(reward_eval_list)
-      r_eval_max = max(reward_eval_list)
+      r_eval_min = np.min(reward_eval_list)
+      r_eval_max = np.max(reward_eval_list)
       model_params_quantized = model_params_quantized.tolist()
       improvement = reward_eval - best_reward_eval
       eval_log.append([t, reward_eval, model_params_quantized])
@@ -394,22 +350,30 @@ def master():
 
       sprint("Eval", t, curr_time, "improvement", improvement, "curr", reward_eval, "prev", prev_best_reward_eval, "best", best_reward_eval)
 
+    # increment generation
+    t += 1
+
 
 def main(args):
-  global optimizer, num_episode, eval_steps, num_worker, num_worker_trial, antithetic, seed_start, retrain_mode, cap_time_mode
+  global optimizer, num_episode, num_test_episode, eval_steps, num_worker, num_worker_trial, antithetic, seed_start, retrain_mode, cap_time_mode, env_name, exp_name, batch_mode, config_args
 
-  optimizer = args.optimizer
-  num_episode = args.num_episode
-  eval_steps = args.eval_steps
-  num_worker = args.num_worker
-  num_worker_trial = args.num_worker_trial
-  antithetic = (args.antithetic == 1)
-  retrain_mode = (args.retrain == 1)
-  cap_time_mode= (args.cap_time == 1)
-  seed_start = args.seed_start
+  optimizer = args.controller_optimizer
+  num_episode = args.controller_num_episode
+  num_test_episode = args.controller_num_test_episode
+  eval_steps = args.controller_eval_steps
+  num_worker = args.controller_num_worker
+  num_worker_trial = args.controller_num_worker_trial
+  antithetic = (args.controller_antithetic == 1)
+  retrain_mode = (args.controller_retrain == 1)
+  cap_time_mode= (args.controller_cap_time == 1)
+  seed_start = args.controller_seed_start
+  env_name = args.env_name
+  exp_name = args.exp_name
+  batch_mode = args.controller_batch_mode
+  config_args = args
 
-  initialize_settings(args.sigma_init, args.sigma_decay)
-
+  initialize_settings(args.controller_sigma_init, args.controller_sigma_decay)
+  
   sprint("process", rank, "out of total ", comm.Get_size(), "started")
   if (rank == 0):
     master()
@@ -431,7 +395,7 @@ def mpi_fork(n):
       IN_MPI="1"
     )
     print( ["mpirun", "-np", str(n), sys.executable] + sys.argv)
-    subprocess.check_call(["mpirun", "-np", str(n), sys.executable] +['-u']+ sys.argv, env=env)
+    subprocess.check_call(["mpirun", "--allow-run-as-root", "-np", str(n), sys.executable] +['-u']+ sys.argv, env=env)
     return "parent"
   else:
     global nworkers, rank
@@ -441,21 +405,6 @@ def mpi_fork(n):
     return "child"
 
 if __name__ == "__main__":
-  parser = argparse.ArgumentParser(description=('Train policy on OpenAI Gym environment '
-                                                'using pepg, ses, openes, ga, cma'))
-  
-  parser.add_argument('-o', '--optimizer', type=str, help='ses, pepg, openes, ga, cma.', default='cma')
-  parser.add_argument('--num_episode', type=int, default=16, help='num episodes per trial')
-  parser.add_argument('--eval_steps', type=int, default=25, help='evaluate every eval_steps step')
-  parser.add_argument('-n', '--num_worker', type=int, default=64)
-  parser.add_argument('-t', '--num_worker_trial', type=int, help='trials per worker', default=1)
-  parser.add_argument('--antithetic', type=int, default=1, help='set to 0 to disable antithetic sampling')
-  parser.add_argument('--cap_time', type=int, default=0, help='set to 0 to disable capping timesteps to 2x of average.')
-  parser.add_argument('--retrain', type=int, default=0, help='set to 0 to disable retraining every eval_steps if results suck.\n only works w/ ses, openes, pepg.')
-  parser.add_argument('-s', '--seed_start', type=int, default=0, help='initial seed')
-  parser.add_argument('--sigma_init', type=float, default=0.1, help='sigma_init')
-  parser.add_argument('--sigma_decay', type=float, default=0.999, help='sigma_decay')
-
-  args = parser.parse_args()
-  if "parent" == mpi_fork(args.num_worker+1): os.exit()
+  args = PARSER.parse_args()
+  if "parent" == mpi_fork(args.controller_num_worker+1): os.exit()
   main(args)
