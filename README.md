@@ -1,16 +1,19 @@
 # World Models
-This repo is based off the [original implemmentation](https://github.com/hardmaru/WorldModelsExperiments) of [World Models](https://arxiv.org/abs/1803.10122). This implementation is written in Tensorflow-2.1. 
+This repo is based off the [original implemmentation](https://github.com/hardmaru/WorldModelsExperiments) of [World Models](https://arxiv.org/abs/1803.10122). This implementation is written in Tensorflow-2.2. 
 
 ## Docker
 The easiest way to handle dependencies is with [Nvidia-Docker](https://github.com/NVIDIA/nvidia-docker). Follow the instructions below to generate and attach to the container.
 ```
 docker image build -t wm:1.0 -f docker/Dockerfile.wm .
-docker container run --gpus '"device=0"' --detach -it --name wm wm:1.0
+docker container run -p 8888:8888 --gpus '"device=0"' --detach -it --name wm wm:1.0
 docker attach wm
 ```
 
 ## Visualizations
-To visualize the environment from the agents perspective or generate synthetic observations use the [visualizations jupyter notebook](WorldModels/visualizations.ipynb) 
+To visualize the environment from the agents perspective or generate synthetic observations use the [visualizations jupyter notebook](WorldModels/visualizations.ipynb). It can be launched from your container with the following:
+```
+jupyter notebook --no-browser --port=8888 --ip=0.0.0.0 --allow-root
+```
 
 Sample of a real frame.
 
@@ -24,31 +27,38 @@ This is an entirely imagined frame that never existed.
 
 ![alt text](imgs/imagined.png "Imagined Frame")
 
-A gif of the true trajectory (left) and the reconstructed trajectory (right). 
+CarRacing gifs showing the true trajectory (left) and the reconstructed trajectory (right). 
 Ground Truth             |  Reconstructed
 :-------------------------:|:-------------------------:
-![alt-text-1](imgs/true_traj.gif "Imagined Trajectory") | ![alt-text-2](imgs/reconstruct_traj.gif "Reconstructed Trajectory")
+![alt-text-1](imgs/true_traj.gif "Real Trajectory") | ![alt-text-2](imgs/reconstruct_traj.gif "Reconstructed Trajectory")
+
+Doom gifs showing a trajectory in the true environment (left) and the dream environment (right). 
+Ground Truth Environment   |  Dream Environment
+:-------------------------:|:-------------------------:
+![alt-text-1](imgs/doom_real_traj.gif "Real Trajectory") | ![alt-text-2](imgs/doom_dream_traj.gif "Dream Trajectory")
 
 ## Reproducing Results From Scratch
-To reproduce results, run the extract.bash script to generate 10k trajectories
+These instructions assume a machine with a 64 core cpu and a gpu. If running in the cloud it will likely financially make more sense to run the extraction and controller processes on a cpu machine and the VAE, preprocessing, and RNN tasks on a GPU machine.
+
+### DoomTakeCover-v0
+To reproduce results for DoomTakeCover-v0, collect trajectories with
 ```
-bash extract.bash
+bash doom_extract.bash
 ```
-After generating the trajectories, train the Variational Auto Encoder
+[OPTIONAL] The doom environment leaves some processes hanging around so you may want to free up memory with the following (be careful with this if you are not running in a container)
 ```
-python vae_train.py
+pkill -9 -f vizdoom
 ```
-Prepare embeddings for training the MDN-RNN
+
+Then launch the training and data preparation processes with
 ```
-python series.py
+bash doom_train.bash
 ```
-Train the MDN-RNN
+
+### CarRacing-v0
+To reproduce results for CarRacing-v0 run the following bash script
 ```
-python rnn_train.py
-```
-Finally train the controller
-```
-bash gce_train.bash
+bash carracing_experiments.bash
 ```
 
 ## Disclaimer
@@ -56,4 +66,15 @@ I have not run this for long enough(~45 days wall clock time) to verify that we 
 
 Average return curves comparing the original implementation and ours. The shaded area represents a standard deviation above and below the mean. 
 
-![alt text](imgs/og_eager_comparison.png "comparison")
+![alt text](imgs/og_carracing_comparison.png "CarRacing-v0 comparison")
+
+For simplicity, the Doom experiment implementation is slightly different than the original
+* We do not use a modified LSTM cell 
+* We do not us weighted cross entropy loss for done predictions
+* We do not adjust temperature (\tau) for training in dreams 
+* We sample sequences for rnn training differently
+
+|  | generation | \tau | returns &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
+|------|------|------|------|
+|   D. Ha Original  | 2000 | 1.0 | 868 +/- 511 |
+|   Eager  | 200 | 1.0 | 867 +/- 557 |

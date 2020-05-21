@@ -8,13 +8,12 @@ class CVAE(tf.keras.Model):
     '''
     convolutional variational auto encoder
     '''
-    def __init__(self, z_size=32, batch_size=1, learning_rate=0.0001,
-                kl_tolerance=0.5):
-        self.z_size = z_size
-        self.batch_size = batch_size
-        self.learning_rate = learning_rate
+    def __init__(self, args):
+         
+        self.z_size = args.z_size
+        self.learning_rate = args.vae_learning_rate
+        self.kl_tolerance = args.vae_kl_tolerance
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
-        self.kl_tolerance = kl_tolerance
         super(CVAE, self).__init__()
 
         self.inference_net_base = tf.keras.Sequential(
@@ -78,15 +77,17 @@ class CVAE(tf.keras.Model):
             eps = tf.random.normal(shape=(100, self.z_size))
         return self.decode(eps)
 
+    @tf.function # for some reason prevents us from using during training
     def encode(self, x):
-        x = self.inference_net_base(x)
-        mean = self.mu_net(x)
-        logvar = self.logvar_net(x)
+        mean, logvar = self.encode_mu_logvar(x)
+        z = self.sample_encoding(mean, logvar)
+        return z
+
+    def sample_encoding(self, mean, logvar):    
         eps = tf.random.normal(shape=tf.shape(mean))
         z = eps * tf.exp(logvar * .5) + mean
         return z
 
-    @tf.function
     def encode_mu_logvar(self, x):
         x = self.inference_net_base(x)
         mean = self.mu_net(x)
@@ -130,9 +131,9 @@ class CVAE(tf.keras.Model):
 
     def __call__(self, inputs, training=True):
         # not sure why keras forces us to use the trainng flag
-        z = self.encode(inputs)
-        y = self.decode(z)
         mean, logvar = self.encode_mu_logvar(inputs)
+        z = self.sample_encoding(mean, logvar)
+        y = self.decode(z)
         mean_and_logvar = tf.concat([mean, logvar], axis=-1)
         return [y, mean_and_logvar]
 
