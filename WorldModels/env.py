@@ -247,7 +247,7 @@ class DreamDoomTakeCoverMDNRNN:
     self.o = z_tp1
 
     z_ch = tf.squeeze(tf.concat([z_tp1, self.rnn_states[1], self.rnn_states[0]], axis=-1))    
-    return z_ch.numpy(), tf.squeeze(r_tp1), d_tp1, {}
+    return z_ch.numpy(), tf.squeeze(r_tp1), d_tp1.numpy(), {}
 
   def close(self):
     tf.keras.backend.clear_session()
