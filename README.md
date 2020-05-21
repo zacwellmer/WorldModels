@@ -47,7 +47,7 @@ bash doom_extract.bash
 ```
 [OPTIONAL] The doom environment leaves some processes hanging around so you may want to free up memory with the following (be careful with this if you are not running in a container)
 ```
-pkill -9 -f doom
+pkill -9 -f vizdoom
 ```
 
 Then launch the training and data preparation processes with
@@ -69,5 +69,7 @@ Average return curves comparing the original implementation and ours. The shaded
 ![alt text](imgs/og_carracing_comparison.png "CarRacing-v0 comparison")
 
 For simplicity, the Doom experiment implementation is slightly different than the original. We do not use a modified LSTM cell and we do not use a weighted cross entropy loss for done predictions, and we sample sequences for rnn training differently. 
-
-![alt text](imgs/og_doom_comparison.png "DoomTakeCover-v0 comparison")
+|  | generation | returns &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
+|------|------|---------|
+|   D. Ha Original  | 2000 | 868 +/- 511 |
+|   Eager  | 200 | 867 +/- 557 |
