@@ -68,8 +68,13 @@ Average return curves comparing the original implementation and ours. The shaded
 
 ![alt text](imgs/og_carracing_comparison.png "CarRacing-v0 comparison")
 
-For simplicity, the Doom experiment implementation is slightly different than the original. We do not use a modified LSTM cell and we do not use a weighted cross entropy loss for done predictions, and we sample sequences for rnn training differently. 
-|  | generation | returns &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
-|------|------|---------|
-|   D. Ha Original  | 2000 | 868 +/- 511 |
-|   Eager  | 200 | 867 +/- 557 |
+For simplicity, the Doom experiment implementation is slightly different than the original
+* We do not use a modified LSTM cell 
+* We do not us weighted cross entropy loss for done predictions
+* We do not adjust temperature (\tau) for training in dreams 
+* We sample sequences for rnn training differently
+
+|  | generation | \tau | returns &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
+|------|------|------|------|
+|   D. Ha Original  | 2000 | 1.0 | 868 +/- 511 |
+|   Eager  | 200 | 1.0 | 867 +/- 557 |
