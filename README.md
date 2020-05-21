@@ -35,7 +35,7 @@ Ground Truth             |  Reconstructed
 Doom gifs showing a trajectory in the true environment (left) and the dream environment (right). 
 Ground Truth Environment   |  Dream Environment
 :-------------------------:|:-------------------------:
-![alt-text-1](imgs/doom_true_traj.gif "Real Trajectory") | ![alt-text-2](imgs/doom_dream_traj.gif "Dream Trajectory")
+![alt-text-1](imgs/doom_real_traj.gif "Real Trajectory") | ![alt-text-2](imgs/doom_dream_traj.gif "Dream Trajectory")
 
 ## Reproducing Results From Scratch
 These instructions assume a machine with a 64 core cpu and a gpu. If running in the cloud it will likely financially make more sense to run the extraction and controller processes on a cpu machine and the VAE, preprocessing, and RNN tasks on a GPU machine.
