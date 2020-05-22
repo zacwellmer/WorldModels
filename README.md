@@ -74,7 +74,7 @@ For simplicity, the Doom experiment implementation is slightly different than th
 * We do not adjust temperature (\tau) for training in dreams 
 * We sample sequences for rnn training differently
 
-|  | generation | \tau | returns &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;|
-|------|------|------|------|
-|   D. Ha Original  | 2000 | 1.0 | 868 +/- 511 |
-|   Eager  | 200 | 1.0 | 867 +/- 557 |
+|  | generation | \tau | Returns Dream Environment  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| Returns Actual Environment  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|------|------|------|------|------|
+|   D. Ha Original  | 2000 | 1.0 | 1145 +/- 690 | 868 +/- 511 |
+|   Eager  | 200 | 1.0 | 1182 +/- 689 | 867 +/- 557 |
