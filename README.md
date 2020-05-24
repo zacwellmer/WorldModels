@@ -1,5 +1,5 @@
 # World Models
-This repo is based off the [original implemmentation](https://github.com/hardmaru/WorldModelsExperiments) of [World Models](https://arxiv.org/abs/1803.10122). This implementation is written in Tensorflow-2.2. 
+This repo reproduces the [original implementation](https://github.com/hardmaru/WorldModelsExperiments) of [World Models](https://arxiv.org/abs/1803.10122). This implementation uses TensorFlow 2.2.
 
 ## Docker
 The easiest way to handle dependencies is with [Nvidia-Docker](https://github.com/NVIDIA/nvidia-docker). Follow the instructions below to generate and attach to the container.
@@ -15,27 +15,19 @@ To visualize the environment from the agents perspective or generate synthetic o
 jupyter notebook --no-browser --port=8888 --ip=0.0.0.0 --allow-root
 ```
 
-Sample of a real frame.
-
-![alt text](imgs/true_frame.png "Real Frame")
-
-Reconstruction of the real frame. This can be thought of as what the agent sees.
-
-![alt text](imgs/reconstructed_frame.png "Reconstructed Frame")
-
-This is an entirely imagined frame that never existed.
-
-![alt text](imgs/imagined.png "Imagined Frame")
+Real Frame Sample             |  Reconstructed Real Frame  |  Imagined Frame
+:-------------------------:|:-------------------------:|:-------------------------:|
+![alt-text-1](imgs/true_frame.png "Real Frame")| ![alt-text-2](imgs/reconstructed_frame.png "Reconstructed Frame") | ![alt-text-3](imgs/imagined.png "Imagined Frame")
 
 CarRacing gifs showing the true trajectory (left) and the reconstructed trajectory (right). 
 Ground Truth             |  Reconstructed
 :-------------------------:|:-------------------------:
-![alt-text-1](imgs/true_traj.gif "Real Trajectory") | ![alt-text-2](imgs/reconstruct_traj.gif "Reconstructed Trajectory")
+<img src="imgs/true_traj.gif" alt="drawing" width="500"/> | <img src="imgs/reconstruct_traj.gif" alt="drawing" width="500"/>
 
 Doom gifs showing a trajectory in the true environment (left) and the dream environment (right). 
 Ground Truth Environment   |  Dream Environment
 :-------------------------:|:-------------------------:
-![alt-text-1](imgs/doom_real_traj.gif "Real Trajectory") | ![alt-text-2](imgs/doom_dream_traj.gif "Dream Trajectory")
+<img src="imgs/doom_real_traj.gif" alt="drawing" width="500"/> | <img src="imgs/doom_dream_traj.gif" alt="drawing" width="500"/>
 
 ## Reproducing Results From Scratch
 These instructions assume a machine with a 64 core cpu and a gpu. If running in the cloud it will likely financially make more sense to run the extraction and controller processes on a cpu machine and the VAE, preprocessing, and RNN tasks on a GPU machine.
