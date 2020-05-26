@@ -19,13 +19,11 @@ Real Frame Sample             |  Reconstructed Real Frame  |  Imagined Frame
 :-------------------------:|:-------------------------:|:-------------------------:|
 ![alt-text-1](imgs/true_frame.png "Real Frame")| ![alt-text-2](imgs/reconstructed_frame.png "Reconstructed Frame") | ![alt-text-3](imgs/imagined.png "Imagined Frame")
 
-CarRacing gifs showing the true trajectory (left) and the reconstructed trajectory (right). 
-Ground Truth             |  Reconstructed
+Ground Truth (CarRacing)             |  Reconstructed
 :-------------------------:|:-------------------------:
 <img src="imgs/true_traj.gif" alt="drawing" width="500"/> | <img src="imgs/reconstruct_traj.gif" alt="drawing" width="500"/>
 
-Doom gifs showing a trajectory in the true environment (left) and the dream environment (right). 
-Ground Truth Environment   |  Dream Environment
+Ground Truth Environment (DoomTakeCover)   |  Dream Environment
 :-------------------------:|:-------------------------:
 <img src="imgs/doom_real_traj.gif" alt="drawing" width="500"/> | <img src="imgs/doom_dream_traj.gif" alt="drawing" width="500"/>
 
