@@ -79,7 +79,7 @@ def initialize_settings(sigma_init=0.1, sigma_decay=0.9999):
 
   PRECISION = 10000
   SOLUTION_PACKET_SIZE = (5+num_params)*num_worker_trial
-  RESULT_PACKET_SIZE = 4*num_worker_trial
+  RESULT_PACKET_SIZE = 2*num_worker_trial + 2 * num_episode * num_worker_trial # worker and job id for each worker + return list and timestep list for each worker
 ###
 
 def sprint(*args):
@@ -129,17 +129,21 @@ def decode_solution_packet(packet):
   return result
 
 def encode_result_packet(results):
-  r = np.array(results)
-  r[:, 2:4] *= PRECISION
-  return r.flatten().astype(np.int32)
+  r = np.reshape(np.array(results), [-1,])
+  r = np.concatenate([np.array(A).flatten() for A in r], axis=0)
+  eval_packet_size = 2*num_worker_trial + 2 * num_test_episode * num_worker_trial # not the same size for training
+  r[2:] *= PRECISION
+  if r.size == eval_packet_size:
+      r = np.concatenate([r, np.zeros(RESULT_PACKET_SIZE - eval_packet_size)-1.0], axis=0)
+  return r.astype(np.int32)
 
 def decode_result_packet(packet):
-  r = packet.reshape(num_worker_trial, 4)
+  r = packet.reshape(num_worker_trial, -1)
   workers = r[:, 0].tolist()
   jobs = r[:, 1].tolist()
-  fits = r[:, 2].astype(np.float)/PRECISION
+  fits = r[:, 2:(2+num_worker_trial*num_episode)].astype(np.float)/PRECISION
   fits = fits.tolist()
-  times = r[:, 3].astype(np.float)/PRECISION
+  times = r[:, (2+num_worker_trial*num_episode):].astype(np.float)/PRECISION
   times = times.tolist()
   result = []
   n = len(jobs)
@@ -148,28 +152,27 @@ def decode_result_packet(packet):
   return result
 
 def worker(weights, seed, train_mode_int=1, max_len=-1):
-  train_mode = (train_mode_int == 1)
+  train_mode = (train_mode_int == 1) # perfomring training if 1. performing evaluation if -1 or 0
   controller.set_model_params(weights)
-  if train_mode_int == True:
+  if train_mode_int == 1: # train with DREAM env
+    env._training = train_mode
     reward_list, t_list = simulate(controller, env,
 	    train_mode=train_mode, render_mode=False, num_episode=num_episode, seed=seed, max_len=max_len)
-  else:
+  elif train_mode_int == 0: # eval with DREAM env
+    env._training = train_mode
+    reward_list, t_list = simulate(controller, env,
+        train_mode=train_mode, render_mode=False, num_episode=num_test_episode, seed=seed, max_len=max_len)
+  elif train_mode_int == -1: # eval with REAL env
     reward_list, t_list = simulate(controller, test_env,
         train_mode=train_mode, render_mode=False, num_episode=num_test_episode, seed=seed, max_len=max_len)
-  if batch_mode == 'min':
-    reward = np.min(reward_list)
-  else:
-    reward = np.mean(reward_list)
-  t = np.mean(t_list)
-  print(t, reward)
-  return reward, t
+  return reward_list, t_list
 
 def slave():
-  global env
-  if env_name == 'CarRacing-v0':
-    env = make_env(args=config_args, dream_env=False) # training in dreams not supported yet
-  else:
-    env = make_env(args=config_args, dream_env=True, render_mode=False)
+  global env, test_env
+  env = make_env(args=config_args, dream_env=config_args.dream_env)
+  # doom env doesn't support mpi testing so don't bother loading
+  if 'DoomTakeCover-v0' != config_args.env_name:
+    test_env = make_env(args=config_args, dream_env=False, render_mode=False)
 
   packet = np.empty(SOLUTION_PACKET_SIZE, dtype=np.int32)
   while 1:
@@ -179,7 +182,7 @@ def slave():
     results = []
     for solution in solutions:
       worker_id, jobidx, seed, train_mode, max_len, weights = solution
-      assert (train_mode == 1 or train_mode == 0), str(train_mode)
+      assert (train_mode == 1 or train_mode == 0 or train_mode == -1), str(train_mode)
       worker_id = int(worker_id)
       possible_error = "work_id = " + str(worker_id) + " rank = " + str(rank)
       assert worker_id == rank, possible_error
@@ -202,7 +205,7 @@ def send_packets_to_slaves(packet_list):
 def receive_packets_from_slaves():
   result_packet = np.empty(RESULT_PACKET_SIZE, dtype=np.int32)
 
-  reward_list_total = np.zeros((population, 2))
+  reward_list_total = np.zeros((population, 2 * num_episode))
 
   check_results = np.ones(population, dtype=np.int)
   for i in range(1, num_worker+1):
@@ -213,28 +216,35 @@ def receive_packets_from_slaves():
       possible_error = "work_id = " + str(worker_id) + " source = " + str(i)
       assert worker_id == i, possible_error
       idx = int(result[1])
-      reward_list_total[idx, 0] = result[2]
-      reward_list_total[idx, 1] = result[3]
+      reward_list_total[idx, :num_episode] = result[2]
+      reward_list_total[idx, num_episode:] = result[3]
       check_results[idx] = 0
 
   check_sum = check_results.sum()
   assert check_sum == 0, check_sum
   return reward_list_total
-
-def evaluate_batch(model_params, test_seed, max_len=-1):
+	
+def evaluate_batch(model_params, train_mode, max_len=-1):
   # runs only from master since mpi and Doom was janky
-  controller.set_model_params(model_params)
-  rewards_list, t_list = simulate(controller, test_env,
-        train_mode=False, render_mode=False, num_episode=num_test_episode, seed=test_seed, max_len=max_len)
+  if args.env_name == 'DoomTakeCover-v0' and train_mode==-1: # can't run the real environment in parallel for doom
+    controller.set_model_params(model_params)
+    rewards_list, t_list = simulate(controller, test_env,
+          train_mode=train_mode, render_mode=False, num_episode=100, seed=0, max_len=max_len) # run exactly 100 episodes b/c we cant run in parallel
+  else:
+    # duplicate model_params
+    solutions = []
+    for i in range(es.popsize):
+      solutions.append(np.copy(model_params))
+    seeds = np.arange(es.popsize)
+    packet_list = encode_solution_packets(seeds, solutions, train_mode=train_mode, max_len=max_len)
+    send_packets_to_slaves(packet_list)
+    response_list_total = receive_packets_from_slaves()
+    rewards_list = response_list_total[:, :(num_test_episode)].flatten() # get rewards
   return rewards_list
 
 def master():
   global test_env
-  if env_name == 'CarRacing-v0':
-    test_env = make_env(args=config_args, dream_env=False)
-  else:
-    test_env = make_env(args=config_args, dream_env=False, render_mode=False)
-
+  test_env = make_env(args=config_args, dream_env=False, render_mode=False)
 
   start_time = int(time.time())
   sprint("training", env_name)
@@ -249,6 +259,7 @@ def master():
   filename_log = filebase+'.log.json'
   filename_hist = filebase+'.hist.json'
   filename_eval_hist = filebase+'.eval_hist.json'
+  filename_real_eval_hist = filebase+'.real_eval_hist.json'
   filename_hist_best = filebase+'.hist_best.json'
   filename_best = filebase+'.best.json'
   
@@ -258,11 +269,12 @@ def master():
   history_best = [] # stores evaluation averages every 25 steps or so
   eval_log = []
   eval_hist = []
+  real_hist = []
   best_reward_eval = 0
   best_model_params_eval = None
 
   max_len = -1 # max time steps (-1 means ignore)
-  while True:
+  for generation_i in range(2000): # run for 2k generations
     solutions = es.ask()
 
     if antithetic:
@@ -273,16 +285,20 @@ def master():
     packet_list = encode_solution_packets(seeds, solutions, max_len=max_len)
 
     send_packets_to_slaves(packet_list)
-    reward_list_total = receive_packets_from_slaves()
-
-    reward_list = reward_list_total[:, 0] # get rewards
-
-    mean_time_step = int(np.mean(reward_list_total[:, 1])*100)/100. # get average time step
-    max_time_step = int(np.max(reward_list_total[:, 1])*100)/100. # get average time step
-    avg_reward = int(np.mean(reward_list)*100)/100. # get average time step
-    std_reward = int(np.std(reward_list)*100)/100. # get average time step
-
-    es.tell(reward_list)
+    
+    response_list_total = receive_packets_from_slaves()
+    reward_list_raw = response_list_total[:, :(num_episode)] # get rewards
+    time_list_raw = response_list_total[:, (num_episode):]
+    if batch_mode == 'min':
+        reward_reduced = reward_list_raw.min(axis=1)
+    elif batch_mode == 'mean':
+        reward_reduced = reward_list_raw.mean(axis=1)
+    # actual statistics from non reduced rewards
+    mean_time_step = int(np.mean(time_list_raw)*100)/100. 
+    max_time_step = int(np.max(time_list_raw)*100)/100.
+    avg_reward = int(np.mean(reward_list_raw)*100)/100.
+    std_reward = int(np.std(reward_list_raw)*100)/100. 
+    es.tell(reward_reduced)
 
     es_solution = es.result()
     model_params = es_solution[0] # best historical solution
@@ -290,8 +306,8 @@ def master():
     curr_reward = es_solution[2] # best of the current batch
     controller.set_model_params(np.array(model_params).round(4))
 
-    r_max = int(np.max(reward_list)*100)/100.
-    r_min = int(np.min(reward_list)*100)/100.
+    r_max = int(np.max(reward_list_raw)*100)/100.
+    r_min = int(np.min(reward_list_raw)*100)/100.
 
     curr_time = int(time.time()) - start_time
 
@@ -314,11 +330,11 @@ def master():
 
     if (t == 1):
       best_reward_eval = avg_reward
-    if (t % eval_steps == 0): # evaluate on actual task at hand
+    if (t % eval_steps == 0): # evaluate on the dream environment with the best agent in the population
 
       prev_best_reward_eval = best_reward_eval
       model_params_quantized = np.array(es.current_param()).round(4)
-      reward_eval_list = evaluate_batch(model_params_quantized, max_len=-1, test_seed=t)
+      reward_eval_list = evaluate_batch(model_params_quantized, max_len=-1, train_mode=0) # if dream training evaluate in dream env otherwise true env
       reward_eval = np.mean(reward_eval_list)
       r_eval_std = np.std(reward_eval_list)
       r_eval_min = np.min(reward_eval_list)
@@ -335,6 +351,19 @@ def master():
       if (len(eval_log) == 1 or reward_eval > best_reward_eval):
         best_reward_eval = reward_eval
         best_model_params_eval = model_params_quantized
+
+        # if new high score in the dream environment test on the real environment
+        if config_args.dream_env == True:
+          reward_real_eval_list = evaluate_batch(best_model_params_eval, max_len=-1, train_mode=-1) # evaluate in REAL environment
+          reward_real_eval = np.mean(reward_real_eval_list)
+          r_real_eval_std = np.std(reward_real_eval_list)
+          r_real_eval_min = np.min(reward_real_eval_list)
+          r_real_eval_max = np.max(reward_real_eval_list)
+          real_h = (t, reward_real_eval, r_real_eval_std, r_real_eval_min, r_real_eval_max)
+          real_hist.append(real_h)
+          with open(filename_real_eval_hist, 'wt') as out:
+            res = json.dump(real_hist, out, sort_keys=False, indent=0, separators=(',', ':'))
+
       else:
         if retrain_mode:
           sprint("reset to previous best params, where best_reward_eval =", best_reward_eval)
@@ -364,6 +393,8 @@ def main(args):
   num_worker = args.controller_num_worker
   num_worker_trial = args.controller_num_worker_trial
   antithetic = (args.controller_antithetic == 1)
+  if antithetic and optimizer != 'oes':
+      raise ValueError('OpenES is the only optimizer we support antithetic sampling')
   retrain_mode = (args.controller_retrain == 1)
   cap_time_mode= (args.controller_cap_time == 1)
   seed_start = args.controller_seed_start
@@ -394,7 +425,7 @@ def mpi_fork(n):
       OMP_NUM_THREADS="1",
       IN_MPI="1"
     )
-    print( ["mpirun", "-np", str(n), sys.executable] + sys.argv)
+    print( ["mpirun", "--allow-run-as-root", "-np", str(n), sys.executable] + sys.argv)
     subprocess.check_call(["mpirun", "--allow-run-as-root", "-np", str(n), sys.executable] +['-u']+ sys.argv, env=env)
     return "parent"
   else:
