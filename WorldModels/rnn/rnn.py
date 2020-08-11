@@ -162,9 +162,10 @@ def rnn_sim(rnn, z, states, a, training=True):
   cat = tfd.Categorical(logits=logpi)
   component_splits = [1] * rnn.args.rnn_num_mixture
   mus = tf.split(mu, num_or_size_splits=component_splits, axis=1)
-  sigs = tf.split(tf.exp(logstd), num_or_size_splits=component_splits, axis=1)
 
-  sigs = sigs * tf.sqrt(rnn.args.rnn_temperature) # temperature
+  # temperature
+  sigs = tf.split(tf.exp(logstd) * tf.sqrt(rnn.args.rnn_temperature), component_splits, axis=1) 
+
   coll = [tfd.MultivariateNormalDiag(loc=loc, scale_diag=scale) for loc, scale in zip(mus, sigs)]
   mixture = tfd.Mixture(cat=cat, components=coll)
   z = tf.reshape(mixture.sample(), shape=(-1, rnn.args.z_size))
