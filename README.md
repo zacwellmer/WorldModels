@@ -31,24 +31,16 @@ Ground Truth Environment (DoomTakeCover)   |  Dream Environment
 These instructions assume a machine with a 64 core cpu and a gpu. If running in the cloud it will likely financially make more sense to run the extraction and controller processes on a cpu machine and the VAE, preprocessing, and RNN tasks on a GPU machine.
 
 ### DoomTakeCover-v0
-To reproduce results for DoomTakeCover-v0, collect trajectories with
+**CAUTION** The doom environment leaves some processes hanging around. In addition to running the doom experiments, the script kills processes including 'vizdoom' in the name (be careful with this if you are not running in a container).
+To reproduce results for DoomTakeCover-v0 run the following bash script.
 ```
-bash doom_extract.bash
-```
-[OPTIONAL] The doom environment leaves some processes hanging around so you may want to free up memory with the following (be careful with this if you are not running in a container)
-```
-pkill -9 -f vizdoom
-```
-
-Then launch the training and data preparation processes with
-```
-bash doom_train.bash
+bash launch_scripts/wm_doom.bash
 ```
 
 ### CarRacing-v0
 To reproduce results for CarRacing-v0 run the following bash script
 ```
-bash carracing_experiments.bash
+bash launch_scripts/carracing.bash
 ```
 
 ## Disclaimer
@@ -59,12 +51,11 @@ Average return curves comparing the original implementation and ours. The shaded
 ![alt text](imgs/og_carracing_comparison.png "CarRacing-v0 comparison")
 
 For simplicity, the Doom experiment implementation is slightly different than the original
-* We do not use a modified LSTM cell 
-* We do not us weighted cross entropy loss for done predictions
-* We do not adjust temperature (\tau) for training in dreams 
-* We sample sequences for rnn training differently
+* We do not use weighted cross entropy loss for done predictions 
+* We train the RNN with sequences that always begin at the start of an episode (as opposed to random subsequences)
+* We sample whether the agent dies (as opposed to a deterministic cut-off)
 
-|  | generation | \tau | Returns Dream Environment  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| Returns Actual Environment  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
-|------|------|------|------|------|
-|   D. Ha Original  | 2000 | 1.0 | 1145 +/- 690 | 868 +/- 511 |
-|   Eager  | 200 | 1.0 | 1182 +/- 689 | 867 +/- 557 |
+|  |\tau | Returns Dream Environment  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| Returns Actual Environment  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+|------|------|------|------|
+|   D. Ha Original  | 1.0 | 1145 +/- 690 | 868 +/- 511 |
+|   Eager  |  1.0 | 1465 +/- 633 | 807 +/- 517 |
