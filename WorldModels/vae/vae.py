@@ -124,7 +124,7 @@ class CVAE(tf.keras.Model):
             kl_loss = tf.reduce_mean(input_tensor=kl_loss)
 
             return kl_loss
-        return [reconstruction_loss_func, kl_loss_func]
+        return {'reconstruction': reconstruction_loss_func, 'KL': kl_loss_func}
 
     def call(self, inputs, training=True):
         return self.__call__(inputs, training)
@@ -135,7 +135,7 @@ class CVAE(tf.keras.Model):
         z = self.sample_encoding(mean, logvar)
         y = self.decode(z)
         mean_and_logvar = tf.concat([mean, logvar], axis=-1)
-        return [y, mean_and_logvar]
+        return {'reconstruction': y, 'KL': mean_and_logvar}
 
     def set_random_params(self, stdev=0.5):
         params = self.get_weights()

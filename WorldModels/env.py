@@ -37,43 +37,43 @@ class CarRacingMDNRNN(CarRacingWrapper):
     self.rnn = MDNRNN(args)
      
     if load_model:
-      self.vae.set_weights(tf.keras.models.load_model('results/{}/{}/tf_vae'.format(args.exp_name, args.env_name), compile=False).get_weights())
-      self.rnn.set_weights(tf.keras.models.load_model('results/{}/{}/tf_rnn'.format(args.exp_name, args.env_name), compile=False).get_weights())
-
+      self.vae.set_weights([param_i.numpy() for param_i in tf.saved_model.load('results/{}/{}/tf_vae'.format(args.exp_name, args.env_name)).variables])
+      self.rnn.set_weights([param_i.numpy() for param_i in tf.saved_model.load('results/{}/{}/tf_rnn'.format(args.exp_name, args.env_name)).variables])
     self.rnn_states = rnn_init_state(self.rnn)
     
     self.full_episode = False 
-    self.observation_space = Box(low=np.NINF, high=np.Inf, shape=(32+256))
-
+    self.observation_space = Box(low=np.NINF, high=np.Inf, shape=(args.z_size+args.rnn_size*args.state_space))
   def encode_obs(self, obs):
     # convert raw obs to z, mu, logvar
     result = np.copy(obs).astype(np.float)/255.0
     result = result.reshape(1, 64, 64, 3)
     z = self.vae.encode(result)[0]
     return z
-
   def reset(self):
     self.rnn_states = rnn_init_state(self.rnn)
     if self.with_obs:
-        [z_h, obs] = super(CarRacingMDNRNN, self).reset() # calls step
-        return [z_h, obs]
+        [z_state, obs] = super(CarRacingMDNRNN, self).reset() # calls step
+        self.N_tiles = len(self.track)
+        return [z_state, obs]
     else:
-        z_h = super(CarRacingMDNRNN, self).reset() # calls step
-        return z_h
-
+        z_state = super(CarRacingMDNRNN, self).reset() # calls step
+        self.N_tiles = len(self.track)
+        return z_state
   def _step(self, action):
     obs, reward, done, _ = super(CarRacingMDNRNN, self)._step(action)
-    z = self.encode_obs(obs)
+    z = tf.squeeze(self.encode_obs(obs))
     h = tf.squeeze(self.rnn_states[0])
-    z_h = tf.concat([z, h], axis=-1)
-
+    c = tf.squeeze(self.rnn_states[1])
+    if self.rnn.args.state_space == 2:
+        z_state = tf.concat([z, c, h], axis=-1)
+    else:
+        z_state = tf.concat([z, h], axis=-1)
     if action is not None: # don't compute state on reset
         self.rnn_states = rnn_next_state(self.rnn, z, action, self.rnn_states)
     if self.with_obs:
-        return [z_h, obs], reward, done, {}
+        return [z_state, obs], reward, done, {}
     else:
-        return z_h, reward, done, {}
-
+        return z_state, reward, done, {}
   def close(self):
     super(CarRacingMDNRNN, self).close()
     tf.keras.backend.clear_session()
@@ -96,8 +96,8 @@ class DoomTakeCoverMDNRNN(DoomTakeCoverEnv):
     self.rnn = MDNRNN(args)
 
     if load_model:
-      self.vae.set_weights(tf.keras.models.load_model('results/{}/{}/tf_vae'.format(args.exp_name, args.env_name), compile=False).get_weights())
-      self.rnn.set_weights(tf.keras.models.load_model('results/{}/{}/tf_rnn'.format(args.exp_name, args.env_name), compile=False).get_weights())
+      self.vae.set_weights([param_i.numpy() for param_i in tf.saved_model.load('results/{}/{}/tf_vae'.format(args.exp_name, args.env_name)).variables])
+      self.rnn.set_weights([param_i.numpy() for param_i in tf.saved_model.load('results/{}/{}/tf_rnn'.format(args.exp_name, args.env_name)).variables])
 
     self.action_space = Box(low=-1.0, high=1.0, shape=())
     self.obs_size = self.rnn.args.z_size + self.rnn.args.rnn_size * self.rnn.args.state_space
@@ -204,8 +204,8 @@ class DreamDoomTakeCoverMDNRNN:
     self.rnn = MDNRNN(args)
 
     if load_model:
-      self.vae.set_weights(tf.keras.models.load_model('results/{}/{}/tf_vae'.format(args.exp_name, args.env_name), compile=False).get_weights())
-      self.rnn.set_weights(tf.keras.models.load_model('results/{}/{}/tf_rnn'.format(args.exp_name, args.env_name), compile=False).get_weights())
+      self.vae.set_weights([param_i.numpy() for param_i in tf.saved_model.load('results/{}/{}/tf_vae'.format(args.exp_name, args.env_name)).variables])
+      self.rnn.set_weights([param_i.numpy() for param_i in tf.saved_model.load('results/{}/{}/tf_rnn'.format(args.exp_name, args.env_name)).variables])
 
     # future versions of OpenAI gym needs a dtype=np.float32 in the next line:
     self.action_space = Box(low=-1.0, high=1.0, shape=())
@@ -215,7 +215,9 @@ class DreamDoomTakeCoverMDNRNN:
 
     self.rnn_states = None
     self.o = None
-    
+
+    self._training=True    
+
     self.seed() 
     self.reset()
 
@@ -242,7 +244,7 @@ class DreamDoomTakeCoverMDNRNN:
     return [seed]
 
   def step(self, action):
-    rnn_states_p1, z_tp1, r_tp1, d_tp1 = rnn_sim(self.rnn, self.o, self.rnn_states, action)
+    rnn_states_p1, z_tp1, r_tp1, d_tp1 = rnn_sim(self.rnn, self.o, self.rnn_states, action, training=self._training)
     self.rnn_states = rnn_states_p1
     self.o = z_tp1
 

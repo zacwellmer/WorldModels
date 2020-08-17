@@ -61,7 +61,7 @@ class Controller:
     else:
       action = np.tanh(np.dot(h, self.weight) + self.bias)
     
-    if self.env_name == 'CarRacing-v0': 
+    if 'CarRacing' in self.env_name:
       action[1] = (action[1]+1.0) / 2.0
       action[2] = clip(action[2])
 

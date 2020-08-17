@@ -31,16 +31,18 @@ def ds_gen():
         action = np.reshape(data['action'], newshape=[-1, args.a_width])
         reward = data['reward']
         done = data['done']
+        N = data['N']
         
         n_pad = args.max_frames - img.shape[0] # pad so they are all a thousand step long episodes
         img = tf.pad(img, [[0, n_pad], [0, 0], [0, 0], [0, 0]])
         action = tf.pad(action, [[0, n_pad], [0, 0]])
         reward = tf.pad(reward, [[0, n_pad]])
         done = tf.pad(done, [[0, n_pad]], constant_values=done[-1])
-        yield img, action, reward, done
+        N = tf.pad(N, [[0, n_pad]], constant_values=N[-1])
+        yield img, action, reward, done, N
 
 def create_tf_dataset():
-    dataset = tf.data.Dataset.from_generator(ds_gen, output_types=(tf.float32, tf.float32, tf.float32, tf.bool), output_shapes=((args.max_frames, 64, 64, 3), (args.max_frames, args.a_width), (args.max_frames,), (args.max_frames,)))
+    dataset = tf.data.Dataset.from_generator(ds_gen, output_types=(tf.float32, tf.float32, tf.float32, tf.bool, tf.uint16), output_shapes=((args.max_frames, 64, 64, 3), (args.max_frames, args.a_width), (args.max_frames,), (args.max_frames,), (args.max_frames,)))
     return dataset
 
 @tf.function
@@ -75,11 +77,12 @@ N_dataset = []
 i=0
 for batch in dataset:
   i += 1
-  obs_batch, action_batch, r, d = batch
+  obs_batch, action_batch, r, d, N = batch
   obs_batch = tf.squeeze(obs_batch, axis=0)
   action_batch = tf.squeeze(action_batch, axis=0)
   r = tf.reshape(r, [-1, 1])
   d = tf.reshape(d, [-1, 1])
+  N = tf.reshape(N, [-1, 1])
 
   mu, logvar = encode_batch(obs_batch)
 
@@ -88,6 +91,7 @@ for batch in dataset:
   action_dataset.append(action_batch.numpy())
   r_dataset.append(r.numpy().astype(np.float16))
   d_dataset.append(d.numpy().astype(np.bool))
+  N_dataset.append(N.numpy().astype(np.uint16))
 
   if ((i+1) % 100 == 0):
     print(i+1)
@@ -97,5 +101,6 @@ mu_dataset = np.array(mu_dataset)
 logvar_dataset = np.array(logvar_dataset)
 r_dataset = np.array(r_dataset)
 d_dataset = np.array(d_dataset)
+N_dataset = np.array(N_dataset)
 
-np.savez_compressed(os.path.join(SERIES_DIR, "series.npz"), action=action_dataset, mu=mu_dataset, logvar=logvar_dataset, reward=r_dataset, done=d_dataset)
+np.savez_compressed(os.path.join(SERIES_DIR, "series.npz"), action=action_dataset, mu=mu_dataset, logvar=logvar_dataset, reward=r_dataset, done=d_dataset, N=N_dataset)

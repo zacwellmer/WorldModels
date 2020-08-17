@@ -26,6 +26,7 @@ for trial in range(args.max_trials):
   try:
     random_generated_int = random.randint(0, 2**31-1)
     filename = dir_name+"/"+str(random_generated_int)+".npz"
+    recording_N = []
     recording_frame = []
     recording_action = []
     recording_reward = []
@@ -48,6 +49,11 @@ for trial in range(args.max_trials):
         env.render("human")
       else:
         env.render("rgb_array")
+
+      if 'CarRacing' in args.env_name:
+        recording_N.append(env.N_tiles)
+      else:
+        recording_N.append(0)
 
       recording_frame.append(frame)
       
@@ -77,9 +83,10 @@ for trial in range(args.max_trials):
     recording_action = np.array(recording_action, dtype=np.float16)
     recording_reward = np.array(recording_reward, dtype=np.float16)
     recording_done = np.array(recording_done, dtype=np.bool)
+    recording_N = np.array(recording_N, dtype=np.uint16)
     
     if (len(recording_frame) > args.min_frames):
-      np.savez_compressed(filename, obs=recording_frame, action=recording_action, reward=recording_reward, done=recording_done)
+      np.savez_compressed(filename, obs=recording_frame, action=recording_action, reward=recording_reward, done=recording_done, N=recording_N)
   except gym.error.Error:
     print("stupid gym error, life goes on")
     env.close()
