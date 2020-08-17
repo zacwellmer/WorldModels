@@ -159,9 +159,9 @@ def worker(weights, seed, train_mode_int=1, max_len=-1):
     reward_list, t_list = simulate(controller, env,
 	    train_mode=train_mode, render_mode=False, num_episode=num_episode, seed=seed, max_len=max_len)
   elif train_mode_int == 0: # eval with DREAM env
-    env._training = train_mode
+    env._training = True #train_mode
     reward_list, t_list = simulate(controller, env,
-        train_mode=train_mode, render_mode=False, num_episode=num_test_episode, seed=seed, max_len=max_len)
+        train_mode=train_mode, render_mode=False, num_episode=num_episode, seed=seed, max_len=max_len)
   elif train_mode_int == -1: # eval with REAL env
     reward_list, t_list = simulate(controller, test_env,
         train_mode=train_mode, render_mode=False, num_episode=num_test_episode, seed=seed, max_len=max_len)
@@ -239,7 +239,13 @@ def evaluate_batch(model_params, train_mode, max_len=-1):
     packet_list = encode_solution_packets(seeds, solutions, train_mode=train_mode, max_len=max_len)
     send_packets_to_slaves(packet_list)
     response_list_total = receive_packets_from_slaves()
-    rewards_list = response_list_total[:, :(num_test_episode)].flatten() # get rewards
+
+    if train_mode == -1: # evaluate on 100 episodes in the TRUE environment
+        # num test episode is defined per agent. So we receive popsize * num_test_episode episodes
+        # report results with 100 episodes
+        rewards_list = response_list_total[:, :(num_test_episode)].flatten()[:100] # get rewards
+    else:
+        rewards_list = response_list_total[:, :num_episode].flatten() # get rewards
   return rewards_list
 
 def master():
@@ -334,7 +340,11 @@ def master():
 
       prev_best_reward_eval = best_reward_eval
       model_params_quantized = np.array(es.current_param()).round(4)
-      reward_eval_list = evaluate_batch(model_params_quantized, max_len=-1, train_mode=0) # if dream training evaluate in dream env otherwise true env
+      if config_args.dream_env == True:
+        reward_eval_list = evaluate_batch(model_params_quantized, max_len=-1, train_mode=0) # evaluate in dream environment
+      else:
+        reward_eval_list = evaluate_batch(model_params_quantized, max_len=-1, train_mode=-1) # evaluate in real environment
+
       reward_eval = np.mean(reward_eval_list)
       r_eval_std = np.std(reward_eval_list)
       r_eval_min = np.min(reward_eval_list)

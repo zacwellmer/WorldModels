@@ -204,8 +204,8 @@ class DreamDoomTakeCoverMDNRNN:
     self.rnn = MDNRNN(args)
 
     if load_model:
-      self.vae.set_weights(tf.keras.models.load_model('results/{}/{}/tf_vae'.format(args.exp_name, args.env_name), compile=False).get_weights())
-      self.rnn.set_weights(tf.keras.models.load_model('results/{}/{}/tf_rnn'.format(args.exp_name, args.env_name), compile=False).get_weights())
+      self.vae.set_weights([param_i.numpy() for param_i in tf.saved_model.load('results/{}/{}/tf_vae'.format(args.exp_name, args.env_name)).variables])
+      self.rnn.set_weights([param_i.numpy() for param_i in tf.saved_model.load('results/{}/{}/tf_rnn'.format(args.exp_name, args.env_name)).variables])
 
     # future versions of OpenAI gym needs a dtype=np.float32 in the next line:
     self.action_space = Box(low=-1.0, high=1.0, shape=())
