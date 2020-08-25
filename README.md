@@ -58,4 +58,4 @@ For simplicity, the Doom experiment implementation is slightly different than th
 |  |\tau | Returns Dream Environment  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;| Returns Actual Environment  &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
 |------|------|------|------|
 |   D. Ha Original  | 1.0 | 1145 +/- 690 | 868 +/- 511 |
-|   Eager  |  1.0 | 1465 +/- 633 | 807 +/- 517 |
+|   Eager  |  1.0 | 1465 +/- 633 | 849 +/- 499 |
