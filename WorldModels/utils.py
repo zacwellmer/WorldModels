@@ -12,7 +12,7 @@ PARSER.add_argument('--full_episode', dest='full_episode', action='store_true', 
 PARSER.add_argument('--no_full_episode', dest='full_episode', action='store_false', help='ignore dones')
 PARSER.add_argument('--render_mode', dest='render_mode', action='store_true')
 PARSER.add_argument('--no_render_mode', dest='render_mode', action='store_false')
-PARSER.add('--exp_mode', required=True, help='defines controller architecture')
+PARSER.add('--exp_mode', required=True, type=int, help='defines controller architecture')
 PARSER.add('--a_width', required=True, type=int, help='width of action vector')
 PARSER.add('--z_size', required=True, type=int, help='z size')
 PARSER.add('--state_space', required=True, type=int, help='1 to only include hidden state. 2 to include both h and c')
