@@ -59,8 +59,9 @@ RUN ln -s /usr/local/cuda/lib64/stubs/libcuda.so /usr/local/cuda/lib64/stubs/lib
 ENV LANG C.UTF-8
 
 RUN apt-get update && apt-get install -y \
-    python3 \
-    python3-pip
+    python3
+
+RUN curl -fsSL -o- https://bootstrap.pypa.io/pip/3.5/get-pip.py | python3.5
 
 RUN python3 -m pip --no-cache-dir install --upgrade \
     pip \
@@ -91,7 +92,6 @@ COPY . .
 # install packages
 RUN apt -y update
 RUN apt install -y python3-dev
-RUN apt install -y python3-pip
 RUN apt install -y git
 RUN apt install -y wget
 
