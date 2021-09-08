@@ -1,6 +1,6 @@
 tensorflow_probability==0.9
 gym==0.9.4
-pillow==6.2.1
+pillow==8.3.2
 cma==2.2.0
 numpy==1.17.4
 box2d-py==2.3.8
