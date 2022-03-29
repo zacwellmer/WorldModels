@@ -1,3 +1,4 @@
+export LD_LIBRARY_PATH=/usr/local/cuda/extras/CUPTI/lib64:/usr/local/cuda/lib64:/usr/local/nvidia/lib:/usr/local/nvidia/lib64
 CONFIG_PATH=configs/carracing.config
 for i in `seq 1 64`;
 do
