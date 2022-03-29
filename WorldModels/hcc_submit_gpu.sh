@@ -1,8 +1,8 @@
 #!/bin/sh
-#SBATCH --time=6:00:00          # Maximum run time in hh:mm:ss
+#SBATCH --time=24:00:00          # Maximum run time in hh:mm:ss
 #SBATCH --nodes=1               # Run on one node
 #SBATCH --ntasks=9              # Number of tasks to run, 1CPU per task
-#SBATCH --mem=16000             # Maximum memory required (in megabytes)
+#SBATCH --mem=60000             # Maximum memory required (in megabytes)
 #SBATCH --job-name=default_479  # Job name (to track progress)
 #SBATCH --partition=cse479,cse479_preempt      # Partition on which to run job
 #SBATCH --gres=gpu:1            # Don't change this, it requests a GPU
