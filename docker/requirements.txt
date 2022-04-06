@@ -10,5 +10,5 @@ joblib==0.14.1
 mpi4py==2.0.0
 gym-pull==0.1.7
 configargparse==1.2.3
-notebook==6.0.3
+notebook==6.4.10
 matplotlib==3.0.3
