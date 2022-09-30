@@ -6,7 +6,7 @@ numpy==1.17.4
 box2d-py==2.3.8
 pyglet==1.3.2
 PyQt5==5.12.3
-joblib==0.14.1
+joblib==1.2.0
 mpi4py==2.0.0
 gym-pull==0.1.7
 configargparse==1.2.3
